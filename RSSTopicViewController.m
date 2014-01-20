@@ -9,9 +9,15 @@
 #import "MasterViewController.h"
 #import "DetailViewController.h"
 #import "RSSTopicViewController.h"
+#import "rssClass.h"
 
 @implementation RSSTopicViewController
 {
+    NSArray *paths;
+    NSString *documentsDirectory ;
+    NSString *writableDBPath ;
+    FMDatabase* forRSSDb;
+    
     NSMutableArray *_objects;
     
     // title要素を格納する配列
@@ -35,12 +41,90 @@
     BOOL linkElementCheck;
     // link要素のテキスト
     NSString *linkText;
-    
+    NSMutableArray *alreadyreadUrl;
+    NSString *tempUrl;
+    NSString *kidoku;
     NSInteger unUsedTopic;
     NSInteger dataArrayCount;
+    
 }
 @synthesize url;
 
+-(void)viewWillAppear:(BOOL)animated{
+    NSLog(@"ViewWillAppear");
+    NSLog(@"添付%@",tempUrl);
+    _objects = [NSMutableArray array];
+    
+    NSLog(@"%@",url);
+    alreadyreadUrl = [[NSMutableArray alloc] init];
+    //データベースの訪問済みurlを吸い出して、配列に代入
+    paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    documentsDirectory = [paths objectAtIndex:0];
+    writableDBPath = [documentsDirectory stringByAppendingPathComponent:@"forRSS.sqlite"];
+    
+    forRSSDb = [FMDatabase databaseWithPath:writableDBPath];
+    if(![forRSSDb open])
+    {
+        NSLog(@"Err %d: %@", [forRSSDb lastErrorCode], [forRSSDb lastErrorMessage]);
+    }
+    else{
+        NSLog(@"データベースオープン");
+    }
+    
+    [forRSSDb setShouldCacheStatements:YES];
+    
+    NSString* sql = @"SELECT * FROM urlTable ;";
+    FMResultSet* rs = [forRSSDb executeQuery:sql];
+    while( [rs next] )
+    {
+        rssClass* rss = [[rssClass alloc] init];
+        rss.alreadyreadUrl = [rs stringForColumn:@"url"];
+        [alreadyreadUrl addObject:rss.alreadyreadUrl];
+    }
+    [rs close];
+    [forRSSDb close];
+    
+    [_objects setArray:[self loadXML:url]];
+    [self.tableView reloadData];
+
+}
+
+- (void)viewDidLoad
+{
+        kidoku = @"";
+        tempUrl = @"";
+        tempUrl = @"";
+    if (_refreshHeaderView == nil) {
+        // 更新ビューのサイズとデリゲートを指定する
+        EGORefreshTableHeaderView *view =
+        [[EGORefreshTableHeaderView alloc] initWithFrame:
+         CGRectMake(
+                    0.0f,
+                    0.0f - self.tableView.bounds.size.height,
+                    self.view.frame.size.width,
+                    self.tableView.bounds.size.height
+                    )];
+        view.delegate = self;
+        [self.tableView addSubview:view];
+        _refreshHeaderView = view;
+    }
+    // 最終更新日付を記録
+    [_refreshHeaderView refreshLastUpdatedDate];
+    
+    UIBarButtonItem *backButton = [[UIBarButtonItem alloc] init] ;
+    backButton.title = @"戻る";
+    self.navigationItem.backBarButtonItem = backButton;
+    
+    _objects = [NSMutableArray array];
+}
+
+- (void)loadView
+{
+    [super loadView];
+}
+
+
+/*
 - (void)viewDidLoad
 {
     [super viewDidLoad];
@@ -71,11 +155,11 @@
     NSLog(@"RSSトピック表示");
     NSLog(@"%@",url);
     
-    [_objects setArray:[self loadXML:url]];
-    /*UIBarButtonItem *addButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(insertNewObject:)];
+    [_objects setArray:[self loadXML:url]];*/
+    /* UIBarButtonItem *addButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(insertNewObject:)];
     self.navigationItem.rightBarButtonItem = addButton;
-    self.modalViewController = (DetailViewController *)[[[self.splitViewController.viewControllers lastObject] topViewController];*/
-}
+    self.modalViewController = (DetailViewController *)[[[self.splitViewController.viewControllers lastObject] topViewController];*//*
+}*/
 
 // スクロールされたことをライブラリに伝える
 - (void)scrollViewDidScroll:(UIScrollView *)scrollView {
@@ -118,23 +202,14 @@
     return [NSDate date];
 }
 
-- (void)insertNewObject:(id)sender
-{
-    if (!_objects) {
-        _objects = [[NSMutableArray alloc] init];
-    }
-    [_objects insertObject:[NSDate date] atIndex:0];
-    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:0 inSection:0];
-    [self.tableView insertRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
-}
-
+//新たにセルが表示されるとき(スクロールしたときなど)に呼ばれる
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
 {
+    
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"TopicCell" forIndexPath:indexPath];
     cell.textLabel.text = _objects[indexPath.row];
     //更新日付を挿入
     dataArrayCount = [dataArray count];
-    NSLog(@"%ld",(long)dataArrayCount);
     if(dataArrayCount > 0){
         cell.detailTextLabel.text = dataArray[indexPath.row];
     }
@@ -150,19 +225,10 @@
     return YES;
 }
 
-- (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath
-{
-    if (editingStyle == UITableViewCellEditingStyleDelete) {
-        [_objects removeObjectAtIndex:indexPath.row];
-        [tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationFade];
-    } else if (editingStyle == UITableViewCellEditingStyleInsert) {
-        // Create a new instance of the appropriate class, insert it into the array, and add a new row to the table view.
-    }
-}
-
 // XMLを読み込み解析するメソッド
 - (NSMutableArray *)loadXML:(NSString *)urlString {
     // 変数の初期化
+    
     titleArray = [NSMutableArray array];
     itemElementCheck = NO;
     titleElementCheck = NO;
@@ -195,7 +261,6 @@
 
 // 開始タグの処理
 - (void)parser:(NSXMLParser *)parser didStartElement:(NSString *)elementName namespaceURI:(NSString *)namespaceURI qualifiedName:(NSString *)qName attributes:(NSDictionary *)attributeDict {
-    NSLog(@"xmlの処理");
     // item要素のチェック
     if ([elementName isEqualToString:@"item"]) {
         itemElementCheck = YES;
@@ -216,7 +281,6 @@
     else{
         dataElementCheck = NO;
     }
-    
     // link要素のチェック
     if (itemElementCheck && [elementName isEqualToString:@"link"]) {
         linkElementCheck = YES;
@@ -261,6 +325,42 @@
             if(unUsedTopic == 1){
                 // 配列linkArrayに追加
                 [linkArray addObject:linkText];
+                if([alreadyreadUrl containsObject:linkText]){
+                    kidoku = @"既読";
+                }
+                //セル内のurlを訪問->戻る
+                if([tempUrl isEqualToString: linkText]){
+                    //データベースにurlを追加
+                    paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+                    documentsDirectory = [paths objectAtIndex:0];
+                    writableDBPath = [documentsDirectory stringByAppendingPathComponent:@"forRSS.sqlite"];
+                    
+                    forRSSDb = [FMDatabase databaseWithPath:writableDBPath];
+                    if(![forRSSDb open])
+                    {
+                        NSLog(@"Err %d: %@", [forRSSDb lastErrorCode], [forRSSDb lastErrorMessage]);
+                    }
+                    else{
+                        NSLog(@"データベースオープン");
+                    }
+
+                    [forRSSDb setShouldCacheStatements:YES];
+                    NSString* insertSQL = [NSString stringWithFormat:@"insert into urlTable values('%@');",tempUrl];
+                    FMResultSet* read = [forRSSDb executeQuery:insertSQL];
+                    NSLog(@"%@",read);
+                    while( [read next] )
+                    {
+                        rssClass* rss = [[rssClass alloc] init];
+                        rss.alreadyreadUrl = [read stringForColumn:@"url"];
+                        [alreadyreadUrl addObject:rss.alreadyreadUrl];
+                    }
+                    NSLog(@"URL%@",alreadyreadUrl);
+                    NSLog(@"確認ログ1");
+                    kidoku = @"既読";
+                    
+                    [read close];
+                    [forRSSDb close];
+                }
             }
         }
         // linkElementCheckをNO、linkTextを空にセット
@@ -283,7 +383,10 @@
                 [dataArray addObject:dataText];
             }
         }
+         NSLog(@"確認ログ2");
         dataElementCheck = NO;
+        kidoku = @"";
+       
         dataText = @"";
     }
 }
@@ -292,15 +395,13 @@
     NSString *step1 = [dataText stringByReplacingOccurrencesOfString:@"-" withString:@"/"];
     NSString *step2 = [step1 stringByReplacingOccurrencesOfString:@"T" withString:@"/"];
     NSString *step3 = [step2 substringWithRange:NSMakeRange(0, 19)];
-    
-    return dataText = [NSString stringWithFormat:@"%@ 更新",step3];
+    return dataText = [NSString stringWithFormat:@"%@ 更新 %@",step3,kidoku];
 }
 
 //<pubDate>をYYYY/MM/DD HH:MM:SSに変換
 - (NSString *)convertPubDate:(NSString *)str{
     
     NSArray *separatedString = [dataText componentsSeparatedByString:@" "];
-    NSLog(@"%@",separatedString);
     // 年を取得
     NSString *year = [separatedString objectAtIndex:3];
     
@@ -319,9 +420,9 @@
     // 日を取得
     // 一桁のときはゼロパディングする
     NSString *day = [NSString stringWithFormat:@"%02d",[[separatedString objectAtIndex:1] intValue]];
-    
     NSString *hour = [NSString stringWithFormat:@"%@",[separatedString objectAtIndex:4]];
-    return  dataText = [NSString stringWithFormat:@"%@/%@/%@/%@ 更新",year,month,day,hour];
+
+    return  dataText = [NSString stringWithFormat:@"%@/%@/%@/%@ 更新 %@",year,month,day,hour,kidoku];
 }
 
 // テキストの取り出し
@@ -333,6 +434,7 @@
     //dataテキストの取り出し
     if(dataElementCheck){
         dataText = [dataText stringByAppendingString:string];
+        NSLog(@"データテキスト%@",dataText);
     }
     
     // linkテキストの取り出し
@@ -364,7 +466,7 @@
     if ([[segue identifier] isEqualToString:@"showDetail"]) {
         NSIndexPath *indexPath = [self.tableView indexPathForSelectedRow];
         NSString *object = linkArray[indexPath.row];
-        
+        tempUrl = object;
         DetailViewController *detailViewController = (DetailViewController*)[segue destinationViewController];
         detailViewController.navigationItem.title = titleArray[indexPath.row];
         [[segue destinationViewController] setDetailItem:object];

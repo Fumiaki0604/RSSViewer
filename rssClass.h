@@ -13,9 +13,11 @@
     NSString *_title;
     NSString *_weburl;
     NSString *_icon;
+    NSString *_alreadyreadUrl;
 }
 
 @property(nonatomic,retain)NSString *title;
 @property(nonatomic,retain)NSString *weburl;
 @property(nonatomic,retain)NSString *icon;
+@property(nonatomic,retain)NSString *alreadyreadUrl;
 @end
