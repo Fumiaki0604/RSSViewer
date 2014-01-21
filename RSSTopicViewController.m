@@ -41,18 +41,20 @@
     BOOL linkElementCheck;
     // link要素のテキスト
     NSString *linkText;
+    //訪問済みのURL
     NSMutableArray *alreadyreadUrl;
     NSString *tempUrl;
     NSString *kidoku;
     NSInteger unUsedTopic;
     NSInteger dataArrayCount;
-    
+    //日付の保存(DB登録用)
+    NSString *data;
 }
 @synthesize url;
 
 -(void)viewWillAppear:(BOOL)animated{
+   
     NSLog(@"ViewWillAppear");
-    NSLog(@"添付%@",tempUrl);
     _objects = [NSMutableArray array];
     
     NSLog(@"%@",url);
@@ -70,8 +72,14 @@
     else{
         NSLog(@"データベースオープン");
     }
-    
+    //記事作成から三ヶ月以上経過したデータはDBより削除する
+    NSString *deleteUrl = @"< datetime('now', 'localtime','-3 months');";
     [forRSSDb setShouldCacheStatements:YES];
+    
+    if([forRSSDb executeUpdate:@"DELETE FROM urlTable WHERE createData < ?",deleteUrl])
+    {
+        NSLog(@"削除成功");
+    }
     
     NSString* sql = @"SELECT * FROM urlTable ;";
     FMResultSet* rs = [forRSSDb executeQuery:sql];
@@ -93,7 +101,7 @@
 {
         kidoku = @"";
         tempUrl = @"";
-        tempUrl = @"";
+        data = @"";
     if (_refreshHeaderView == nil) {
         // 更新ビューのサイズとデリゲートを指定する
         EGORefreshTableHeaderView *view =
@@ -122,44 +130,6 @@
 {
     [super loadView];
 }
-
-
-/*
-- (void)viewDidLoad
-{
-    [super viewDidLoad];
-	// Do any additional setup after loading the view, typically from a nib.
-    
-    if (_refreshHeaderView == nil) {
-        // 更新ビューのサイズとデリゲートを指定する
-        EGORefreshTableHeaderView *view =
-        [[EGORefreshTableHeaderView alloc] initWithFrame:
-         CGRectMake(
-                    0.0f,
-                    0.0f - self.tableView.bounds.size.height,
-                    self.view.frame.size.width,
-                    self.tableView.bounds.size.height
-                    )];
-        view.delegate = self;
-        [self.tableView addSubview:view];
-        _refreshHeaderView = view;
-    }
-    // 最終更新日付を記録
-    [_refreshHeaderView refreshLastUpdatedDate];
-    
-    UIBarButtonItem *backButton = [[UIBarButtonItem alloc] init] ;
-    backButton.title = @"戻る";
-    self.navigationItem.backBarButtonItem = backButton;
-    
-    _objects = [NSMutableArray array];
-    NSLog(@"RSSトピック表示");
-    NSLog(@"%@",url);
-    
-    [_objects setArray:[self loadXML:url]];*/
-    /* UIBarButtonItem *addButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(insertNewObject:)];
-    self.navigationItem.rightBarButtonItem = addButton;
-    self.modalViewController = (DetailViewController *)[[[self.splitViewController.viewControllers lastObject] topViewController];*//*
-}*/
 
 // スクロールされたことをライブラリに伝える
 - (void)scrollViewDidScroll:(UIScrollView *)scrollView {
@@ -343,9 +313,10 @@
                     else{
                         NSLog(@"データベースオープン");
                     }
-
                     [forRSSDb setShouldCacheStatements:YES];
-                    NSString* insertSQL = [NSString stringWithFormat:@"insert into urlTable values('%@');",tempUrl];
+                    //記事の作成日付をsqlのDATATIME型に
+                    data = [self convertSQLdata:data];
+                    NSString* insertSQL = [NSString stringWithFormat:@"insert into urlTable values('%@','%@');",tempUrl,data];
                     FMResultSet* read = [forRSSDb executeQuery:insertSQL];
                     NSLog(@"%@",read);
                     while( [read next] )
@@ -355,7 +326,6 @@
                         [alreadyreadUrl addObject:rss.alreadyreadUrl];
                     }
                     NSLog(@"URL%@",alreadyreadUrl);
-                    NSLog(@"確認ログ1");
                     kidoku = @"既読";
                     
                     [read close];
@@ -383,13 +353,22 @@
                 [dataArray addObject:dataText];
             }
         }
-         NSLog(@"確認ログ2");
         dataElementCheck = NO;
         kidoku = @"";
-       
         dataText = @"";
     }
 }
+
+//2014/01/20/16:30:00 更新 -> 2014-01-20 16:30:00
+-(NSString *)convertSQLdata:(NSString *)dt{
+    NSString *str1 = [dt stringByReplacingOccurrencesOfString:@"/" withString:@"-"];
+    NSMutableString *str2 = [NSMutableString stringWithString:str1];
+    
+    [str2 replaceCharactersInRange:NSMakeRange(10, 1) withString:@" "];
+    NSString *str3 = [str2 substringWithRange:NSMakeRange(0, 19)];
+    return str3;
+}
+
 //<dc:date>2004-06-05T21:54:55+09:00</dc:date>
 - (NSString *)convertdcDate:(NSString *)str{
     NSString *step1 = [dataText stringByReplacingOccurrencesOfString:@"-" withString:@"/"];
@@ -434,7 +413,6 @@
     //dataテキストの取り出し
     if(dataElementCheck){
         dataText = [dataText stringByAppendingString:string];
-        NSLog(@"データテキスト%@",dataText);
     }
     
     // linkテキストの取り出し
@@ -466,6 +444,7 @@
     if ([[segue identifier] isEqualToString:@"showDetail"]) {
         NSIndexPath *indexPath = [self.tableView indexPathForSelectedRow];
         NSString *object = linkArray[indexPath.row];
+        data = dataArray[indexPath.row];
         tempUrl = object;
         DetailViewController *detailViewController = (DetailViewController*)[segue destinationViewController];
         detailViewController.navigationItem.title = titleArray[indexPath.row];
