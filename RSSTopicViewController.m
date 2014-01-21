@@ -73,10 +73,10 @@
         NSLog(@"データベースオープン");
     }
     //記事作成から三ヶ月以上経過したデータはDBより削除する
-    NSString *deleteUrl = @"< datetime('now', 'localtime','-3 months');";
+    NSString *deleteUrl = @"datetime('now', 'localtime','-3 months');";
     [forRSSDb setShouldCacheStatements:YES];
     
-    if([forRSSDb executeUpdate:@"DELETE FROM urlTable WHERE createData < ?",deleteUrl])
+    if([forRSSDb executeUpdate:@"DELETE * FROM urlTable WHERE createData < ?",deleteUrl])
     {
         NSLog(@"削除成功");
     }
